@@ -1,0 +1,21 @@
+{
+    "name": "fieldval-all",
+    "version": "0.0.0",
+    "description": "fieldval-all",
+    "main": "fieldval-all.js",
+    "dependencies": {
+        "tracer" : "*",
+        "fieldval" : "*",
+        "fieldval-basicval" : "*",
+        "fieldval-rules" : "*"
+    },
+    "devDependencies": {
+        "gulp-imports" : "MarcusLongmuir/gulp-imports",
+        "gulp-util": "^2.2.14",
+        "gulp": "^3.6.1",
+        "gulp-nodemon" : "*",
+        "gulp-watch": "^0.6.2",
+        "gulp-uglify": "^0.2.1",
+        "gulp-concat": "^2.2.0"
+    }
+}
