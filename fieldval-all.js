@@ -3,7 +3,7 @@ if((typeof require) === 'function'){
     logger = require('tracer').console();
 }
 
-Validator = function(validating) {
+FieldVal = function(validating) {
     var fv = this;
 
     fv.validating = validating;
@@ -19,16 +19,16 @@ Validator = function(validating) {
     fv.errors = [];
 }
 
-Validator.REQUIRED_ERROR = "required";
-Validator.NOT_REQUIRED_BUT_MISSING = "notrequired";
+FieldVal.REQUIRED_ERROR = "required";
+FieldVal.NOT_REQUIRED_BUT_MISSING = "notrequired";
 
-Validator.ONE_OR_MORE_ERRORS = 0;
-Validator.FIELD_MISSING = 1;
-Validator.INCORRECT_FIELD_TYPE = 2;
-Validator.FIELD_UNRECOGNIZED = 3;
-Validator.MULTIPLE_ERRORS = 4;
+FieldVal.ONE_OR_MORE_ERRORS = 0;
+FieldVal.FIELD_MISSING = 1;
+FieldVal.INCORRECT_FIELD_TYPE = 2;
+FieldVal.FIELD_UNRECOGNIZED = 3;
+FieldVal.MULTIPLE_ERRORS = 4;
 
-Validator.get_value_and_type = function(value, desired_type) {
+FieldVal.get_value_and_type = function(value, desired_type) {
     if (desired_type == "integer") {
         var parsed = parseInt(value);
         if (!isNaN(parsed) && ("" + parsed).length == ("" + value).length) {
@@ -60,53 +60,53 @@ Validator.get_value_and_type = function(value, desired_type) {
     };
 }
 
-Validator.use_operators = function(value, operators, validator, field_name){
+FieldVal.use_checks = function(value, checks, validator, field_name){
     var had_error = false;
     var stop = false;
 
-    var use_operator = function(this_operator){
+    var use_check = function(this_check){
 
-        var this_operator_function;
-        if((typeof this_operator) === 'object'){
-            if(Object.prototype.toString.call(this_operator)==='[object Array]'){
-                for(var i = 0; i < this_operator.length; i++){
-                    use_operator(this_operator[i]);
+        var this_check_function;
+        if((typeof this_check) === 'object'){
+            if(Object.prototype.toString.call(this_check)==='[object Array]'){
+                for(var i = 0; i < this_check.length; i++){
+                    use_check(this_check[i]);
                     if(stop){
                         break;
                     }
                 }
                 return;
-            } else if(this_operator.length==0){
+            } else if(this_check.length==0){
                 //Empty array
                 return;
             } else {
-                flags = this_operator;
-                this_operator_function = flags.operator;
+                flags = this_check;
+                this_check_function = flags.check;
                 if(flags!=null && flags.stop_if_error){
                     stop_if_error = true;
                 }
             }
         } else {
-            this_operator_function = this_operator;
+            this_check_function = this_check;
             stop_if_error = true;//defaults to true
         }
 
-        var check = this_operator_function(value, function(new_value){
+        var check = this_check_function(value, function(new_value){
             value = new_value;
         });
         if (check != null){
             if(validator){
-                if(check===Validator.REQUIRED_ERROR){
+                if(check===FieldVal.REQUIRED_ERROR){
                     if(field_name){
                         validator.missing(field_name);   
                     } else {
                         validator.error({
                             error_message: "Field missing.",
-                            error: Validator.FIELD_MISSING
+                            error: FieldVal.FIELD_MISSING
                         })
                     }
-                } else if(check===Validator.NOT_REQUIRED_BUT_MISSING){
-                    //Don't process proceeding operators, but don't throw an error
+                } else if(check===FieldVal.NOT_REQUIRED_BUT_MISSING){
+                    //Don't process proceeding checks, but don't throw an error
                 } else {
                     if(field_name){
                         validator.invalid(field_name, check);
@@ -122,9 +122,9 @@ Validator.use_operators = function(value, operators, validator, field_name){
         }
     }
 
-    for (var i = 0; i < operators.length; i++) {
-        var this_operator = operators[i];
-        use_operator(this_operator);
+    for (var i = 0; i < checks.length; i++) {
+        var this_check = checks[i];
+        use_check(this_check);
         if(stop){
             break;
         }
@@ -136,37 +136,37 @@ Validator.use_operators = function(value, operators, validator, field_name){
     return value;
 }
 
-Validator.required = function(required, flags){//required defaults to true
-    var operator = function(value) {
+FieldVal.required = function(required, flags){//required defaults to true
+    var check = function(value) {
         if (value==null) {
             if(required || required===undefined){
-                return Validator.REQUIRED_ERROR;
+                return FieldVal.REQUIRED_ERROR;
             } else {
-                return Validator.NOT_REQUIRED_BUT_MISSING;
+                return FieldVal.NOT_REQUIRED_BUT_MISSING;
             }
         }
     }
     if(flags!==undefined){
-        flags.operator = operator;
+        flags.check = check;
         return flags
     }
-    return operator;
+    return check;
 };
 
 
-Validator.type = function(desired_type, required, flags) {
+FieldVal.type = function(desired_type, required, flags) {
 
     if((typeof required)==="object"){
         flags = required;
         required = typeof flags.required !== 'undefined' ? flags.required : true;
     }
 
-    var operator = function(value, emit) {
+    var check = function(value, emit) {
 
-        var required_error = Validator.required(required)(value); 
+        var required_error = FieldVal.required(required)(value); 
         if(required_error) return required_error;
 
-        var value_and_type = Validator.get_value_and_type(value, desired_type);
+        var value_and_type = FieldVal.get_value_and_type(value, desired_type);
 
         var inner_desired_type = value_and_type.desired_type;
         var type = value_and_type.type;
@@ -175,7 +175,7 @@ Validator.type = function(desired_type, required, flags) {
         if (type !== inner_desired_type) {
             return {
                 error_message: "Incorrect field type. Expected " + inner_desired_type + ".",
-                error: Validator.INCORRECT_FIELD_TYPE,
+                error: FieldVal.INCORRECT_FIELD_TYPE,
                 expected: inner_desired_type,
                 received: type
             };
@@ -185,13 +185,13 @@ Validator.type = function(desired_type, required, flags) {
         }
     }
     if(flags!==undefined){
-        flags.operator = operator;
+        flags.check = check;
         return flags
     }
-    return operator;
+    return check;
 }
 
-Validator.prototype = {
+FieldVal.prototype = {
 
     default: function(default_value){
         var fv = this;
@@ -208,7 +208,7 @@ Validator.prototype = {
         }
     },
 
-    get: function(field_name) {//Additional arguments are operators
+    get: function(field_name) {//Additional arguments are checks
         var fv = this;
 
         var value = fv.validating[field_name];
@@ -218,8 +218,8 @@ Validator.prototype = {
         if (arguments.length > 1) {
             //Additional checks
 
-            var operators = Array.prototype.slice.call(arguments,1);
-            value = Validator.use_operators(value, operators, fv, field_name);
+            var checks = Array.prototype.slice.call(arguments,1);
+            value = FieldVal.use_checks(value, checks, fv, field_name);
         }
 
         return value;
@@ -244,7 +244,7 @@ Validator.prototype = {
                 existing.errors.push(error);
             } else {
                 fv.invalid_keys[field_name] = {
-                    error: Validator.MULTIPLE_ERRORS,
+                    error: FieldVal.MULTIPLE_ERRORS,
                     error_message: "Multiple errors.",
                     errors: [existing, error]
                 }
@@ -261,7 +261,7 @@ Validator.prototype = {
 
         fv.missing_keys[field_name] = {
             error_message: "Field missing.",
-            error: Validator.FIELD_MISSING
+            error: FieldVal.FIELD_MISSING
         };
         fv.missing_count++;
         return fv;
@@ -272,7 +272,7 @@ Validator.prototype = {
 
         fv.unrecognized_keys[field_name] = {
             error_message: "Unrecognized field.",
-            error: Validator.FIELD_UNRECOGNIZED
+            error: FieldVal.FIELD_UNRECOGNIZED
         };
         fv.unrecognized_count++;
         return fv;
@@ -326,7 +326,7 @@ Validator.prototype = {
 
         if (has_error) {
             returning.error_message = "One or more errors.";
-            returning.error = Validator.ONE_OR_MORE_ERRORS;
+            returning.error = FieldVal.ONE_OR_MORE_ERRORS;
 
             if(fv.errors.length===0){
                 return returning;
@@ -344,7 +344,7 @@ Validator.prototype = {
             } else {
                 //Return a "multiple errors" error
                 return {
-                    error: Validator.MULTIPLE_ERRORS,
+                    error: FieldVal.MULTIPLE_ERRORS,
                     error_message: "Multiple errors.",
                     errors: fv.errors
                 }
@@ -355,7 +355,7 @@ Validator.prototype = {
     }
 }
 
-Validator.Error = function(number, message, data) {
+FieldVal.Error = function(number, message, data) {
     if (((typeof number)==='object') && Object.prototype.toString.call(number) === '[object Array]') {
         var array = number;
         number = array[0];
@@ -375,14 +375,14 @@ Validator.Error = function(number, message, data) {
 }
 
 if (typeof module != 'undefined') {
-    module.exports = Validator;
+    module.exports = FieldVal;
 }
 var _validator_ref;
 
 if((typeof require) === 'function'){
     _validator_ref = require("fieldval");
 } else {
-    _validator_ref = Validator;
+    _validator_ref = FieldVal;
 }
 
 var BasicVal = {
@@ -461,7 +461,7 @@ var BasicVal = {
         return _validator_ref.type("boolean",required,flags);
     },
     string: function(required,flags){
-        var operator = function(value, emit) {
+        var check = function(value, emit) {
             //Passing emit means that the value can be changed
             var error = _validator_ref.type("string",required,flags)(value,emit);
             if(error) return error;
@@ -478,62 +478,62 @@ var BasicVal = {
             }
         }
         if(flags!==undefined){
-            flags.operator = operator;
+            flags.check = check;
             return flags
         }
-        return operator;
+        return check;
     },
     min_length: function(min_len, flags) {
-        var operator = function(value) {
+        var check = function(value) {
             if (value.length < min_len) {
                 return BasicVal.errors.too_short(min_len)
             }
         }
         if(flags!==undefined){
-            flags.operator = operator;
+            flags.check = check;
             return flags
         }
-        return operator;
+        return check;
     },
     max_length: function(max_len, flags) {
-        var operator = function(value) {
+        var check = function(value) {
             if (value.length > max_len) {
                 return BasicVal.errors.too_long(max_len);
             }
         }
         if(flags!==undefined){
-            flags.operator = operator;
+            flags.check = check;
             return flags
         }
-        return operator;
+        return check;
     },
     minimum: function(min_val, flags) {
-        var operator = function(value) {
+        var check = function(value) {
             if (value < min_val) {
                 return BasicVal.errors.too_small(min_val);
             }
         }
         if(flags!==undefined){
-            flags.operator = operator;
+            flags.check = check;
             return flags
         }
-        return operator;
+        return check;
     },
     maximum: function(max_val, flags) {
-        var operator = function(value) {
+        var check = function(value) {
             if (value > max_val) {
                 return BasicVal.errors.too_large(max_val);
             }
         }
         if(flags!==undefined){
-            flags.operator = operator;
+            flags.check = check;
             return flags
         }
-        return operator;
+        return check;
     },
     range: function(min_val, max_val, flags) {
         //Effectively combines minimum and maximum
-        var operator = function(value){
+        var check = function(value){
             if (value < min_val) {
                 return BasicVal.errors.too_small(min_val);
             } else if (value > max_val) {
@@ -541,10 +541,10 @@ var BasicVal = {
             }
         }
         if(flags!==undefined){
-            flags.operator = operator;
+            flags.check = check;
             return flags
         }
-        return operator;
+        return check;
     },
     one_of: function(array, flags) {
         var valid_values = [];
@@ -556,19 +556,19 @@ var BasicVal = {
                 valid_values.push(option);
             }
         }
-        var operator = function(value) {
+        var check = function(value) {
             if (valid_values.indexOf(value) === -1) {
                 return BasicVal.errors.not_in_list();
             }
         }
         if(flags!==undefined){
-            flags.operator = operator;
+            flags.check = check;
             return flags
         }
-        return operator;
+        return check;
     },
     not_empty: function(trim, flags) {
-        var operator = function(value) {
+        var check = function(value) {
             if (trim) {
                 if (value.trim().length === 0) {
                     return BasicVal.errors.cannot_be_empty();
@@ -580,13 +580,13 @@ var BasicVal = {
             }
         }
         if(flags!==undefined){
-            flags.operator = operator;
+            flags.check = check;
             return flags
         }
-        return operator;
+        return check;
     },
     prefix: function(prefix, flags) {
-        var operator = function(value) {
+        var check = function(value) {
             if (value.length >= prefix.length) {
                 if (value.substring(0, prefix.length) != prefix) {
                     return BasicVal.errors.no_prefix(prefix);
@@ -596,13 +596,13 @@ var BasicVal = {
             }
         }
         if(flags!==undefined){
-            flags.operator = operator;
+            flags.check = check;
             return flags
         }
-        return operator;
+        return check;
     },
     each: function(on_each, flags) {
-        var operator = function(array, stop) {
+        var check = function(array, stop) {
             var validator = new _validator_ref(null);
             for (var i = 0; i < array.length; i++) {
                 var value = array[i];
@@ -618,36 +618,36 @@ var BasicVal = {
             }
         }
         if(flags!==undefined){
-            flags.operator = operator;
+            flags.check = check;
             return flags
         }
-        return operator;
+        return check;
     },
     email: function(flags){
-        var operator = function(value) {
+        var check = function(value) {
             var re = BasicVal.email_regex;
             if(!re.test(value)){
                 return BasicVal.errors.invalid_email();
             } 
         }
         if(flags!==undefined){
-            flags.operator = operator;
+            flags.check = check;
             return flags
         }
-        return operator;
+        return check;
     },
     url: function(flags){
-        var operator = function(value) {
+        var check = function(value) {
             var re = BasicVal.url_regex;
             if(!re.test(value)){
                 return BasicVal.errors.invalid_url();
             } 
         }
         if(flags!==undefined){
-            flags.operator = operator;
+            flags.check = check;
             return flags
         }
-        return operator;
+        return check;
     }
 }
 
@@ -657,6 +657,11 @@ BasicVal.url_regex = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*
 if (typeof module != 'undefined') {
     module.exports = BasicVal;
 }
+if((typeof require) === 'function'){
+    FieldVal = require('fieldval')
+    BasicVal = require('fieldval-basicval')
+}
+
 function fieldval_rules_extend(sub, sup) {
     function emptyclass() {}
     emptyclass.prototype = sup.prototype;
@@ -677,7 +682,7 @@ TextRuleField.prototype.create_ui = function(parent){
     var field = this;
 
     if(TextField){
-        parent.add_field(field.name, new TextField(field.display_name || field.name));
+        parent.add_field(field.name, new TextField(field.display_name || field.name, field.json));
     }
 }
 
@@ -685,84 +690,28 @@ TextRuleField.prototype.init = function() {
     var field = this;
 
     field.min_length = field.validator.get("min_length", BasicVal.integer(false));
-    if (field.min_length != null) {
-        if (field.for_search) {
-            fieldErrors.getOrMakeInvalid().put("min_length", new ValidatorError(57).error);
-        } else {
-            if (field.min_length < 1) {
-                fieldErrors.getOrMakeInvalid().put("min_length", new ValidatorError(24).error);
-            }
-        }
-    }
-
     field.max_length = field.validator.get("max_length", BasicVal.integer(false));
-    if (field.max_length != null) {
-
-        if (field.for_search) {
-            fieldErrors.getOrMakeInvalid().put("max_length", new ValidatorError(57).error);
-        } else {
-            if (field.max_length < 1) {
-                fieldErrors.getOrMakeInvalid().put("max_length", new ValidatorError(24).error);
-            }
-
-        }
-    }
 
     field.phrase = field.validator.get("phrase", BasicVal.string(false));
-    if (field.phrase != null) {
-        if (!for_search) {
-            fieldErrors.getOrMakeInvalid().put("phrase", new ValidatorError(65).error);
-        }
-    }
-
     field.equal_to = field.validator.get("equal_to", BasicVal.string(false));
-    if (field.equal_to != null) {
-        if (!for_search) {
-            fieldErrors.getOrMakeInvalid().put("equal_to", new ValidatorError(65).error);
-        }
-    }
-
     field.ci_equal_to = field.validator.get("ci_equal_to", BasicVal.string(false));
-    if (field.ci_equal_to != null) {
-        if (!for_search) {
-            fieldErrors.getOrMakeInvalid().put("ci_equal_to", new ValidatorError(65).error);
-        }
-    }
-
     field.prefix = field.validator.get("prefix", BasicVal.string(false));
-    if (field.prefix != null) {
-        if (!for_search) {
-            fieldErrors.getOrMakeInvalid().put("prefix", new ValidatorError(65).error);
-        }
-    }
-
     field.ci_prefix = field.validator.get("ci_prefix", BasicVal.string(false));
-    if (field.ci_prefix != null) {
-        if (!for_search) {
-            fieldErrors.getOrMakeInvalid().put("ci_prefix", new ValidatorError(65).error);
-        }
-    }
-
     field.query = field.validator.get("query", BasicVal.string(false));
-    if (field.query != null) {
-        if (!for_search) {
-            fieldErrors.getOrMakeInvalid().put("query", new ValidatorError(65).error);
-        }
-    }
-
+    
     return field.validator.end();
 }
 
-TextRuleField.prototype.create_operators = function(){
+TextRuleField.prototype.create_checks = function(){
     var field = this;
 
-    field.operators.push(BasicVal.string(field.required));
+    field.checks.push(BasicVal.string(field.required));
 
     if(field.min_length){
-        field.operators.push(BasicVal.min_length(field.min_length,{stop_on_error:false}));
+        field.checks.push(BasicVal.min_length(field.min_length,{stop_on_error:false}));
     }
     if(field.max_length){
-        field.operators.push(BasicVal.max_length(field.max_length,{stop_on_error:false}));
+        field.checks.push(BasicVal.max_length(field.max_length,{stop_on_error:false}));
     }
 }
 fieldval_rules_extend(NumberRuleField, RuleField);
@@ -777,7 +726,7 @@ NumberRuleField.prototype.create_ui = function(parent){
     var field = this;
 
     if(TextField){
-        parent.add_field(field.name, new TextField(field.display_name || field.name,"number"));
+        parent.add_field(field.name, new TextField(field.display_name || field.name, field.json));
     }
 }
 
@@ -799,19 +748,19 @@ NumberRuleField.prototype.init = function() {
     return field.validator.end();
 }
 
-NumberRuleField.prototype.create_operators = function(){
+NumberRuleField.prototype.create_checks = function(){
     var field = this;
     
-    field.operators.push(BasicVal.number(field.required));
+    field.checks.push(BasicVal.number(field.required));
 
     if(field.minimum){
-        field.operators.push(BasicVal.minimum(field.minimum,{stop_on_error:false}));
+        field.checks.push(BasicVal.minimum(field.minimum,{stop_on_error:false}));
     }
     if(field.maximum){
-        field.operators.push(BasicVal.maximum(field.maximum,{stop_on_error:false}));
+        field.checks.push(BasicVal.maximum(field.maximum,{stop_on_error:false}));
     }
     if(field.integer){
-        field.operators.push(BasicVal.integer(false,{stop_on_error:false}));
+        field.checks.push(BasicVal.integer(false,{stop_on_error:false}));
     }
 }
 fieldval_rules_extend(NestedRuleField, RuleField);
@@ -830,7 +779,7 @@ NestedRuleField.prototype.create_ui = function(parent,form){
         if(form){
             object_field = form;
         } else {
-            object_field = new ObjectField(field.display_name || field.name);
+            object_field = new ObjectField(field.display_name || field.name, field.json);
         }
 
         for(var i in field.fields){
@@ -851,7 +800,7 @@ NestedRuleField.prototype.init = function() {
 
     var fields_json = field.validator.get("fields", BasicVal.object(false));
     if (fields_json != null) {
-        var fields_validator = new Validator(null);
+        var fields_validator = new FieldVal(null);
 
         //TODO prevent duplicate name keys
 
@@ -882,14 +831,14 @@ NestedRuleField.prototype.init = function() {
     return field.validator.end();
 }
 
-NestedRuleField.prototype.create_operators = function(validator){
+NestedRuleField.prototype.create_checks = function(validator){
     var field = this;
 
-    field.operators.push(BasicVal.object(field.required));
+    field.checks.push(BasicVal.object(field.required));
 
-    field.operators.push(function(value,emit){
+    field.checks.push(function(value,emit){
 
-        var inner_validator = new Validator(value);
+        var inner_validator = new FieldVal(value);
 
         for(var i in field.fields){
             var inner_field = field.fields[i];
@@ -913,7 +862,7 @@ ChoiceRuleField.prototype.create_ui = function(parent){
     var field = this;
 
     if(ChoiceField){
-        parent.add_field(field.name, new ChoiceField(field.display_name || field.name, field.choices));
+        parent.add_field(field.name, new ChoiceField(field.display_name || field.name, field.choices, field.json));
     }
 }
 
@@ -925,12 +874,12 @@ ChoiceRuleField.prototype.init = function() {
     return field.validator.end();
 }
 
-ChoiceRuleField.prototype.create_operators = function(){
+ChoiceRuleField.prototype.create_checks = function(){
     var field = this;
 
-    field.operators.push(Validator.required(true))
+    field.checks.push(FieldVal.required(true))
     if(field.choices){
-        field.operators.push(BasicVal.one_of(field.choices,{stop_on_error:false}));
+        field.checks.push(BasicVal.one_of(field.choices,{stop_on_error:false}));
     }
 }
 
@@ -938,8 +887,8 @@ function RuleField(json, validator) {
     var field = this;
 
     field.json = json;
-    field.operators = [];
-    field.validator = (typeof validator != 'undefined') ? validator : new Validator(json);
+    field.checks = [];
+    field.validator = (typeof validator != 'undefined') ? validator : new FieldVal(json);
 
     field.name = field.validator.get("name", BasicVal.string(false));
     field.display_name = field.validator.get("display_name", BasicVal.string(false));
@@ -965,7 +914,7 @@ RuleField.types = {
 RuleField.create_field = function(json) {
     var field = null;
 
-    var validator = new Validator(json);
+    var validator = new FieldVal(json);
 
     var type = validator.get("type", BasicVal.string(true), BasicVal.one_of([
         "nested","text","number","choice"//Need to improve structure
@@ -984,7 +933,7 @@ RuleField.create_field = function(json) {
         return [init_res, null];
     }
 
-    field.create_operators();
+    field.create_checks();
 
     return [null, field];
 }
@@ -992,7 +941,7 @@ RuleField.create_field = function(json) {
 RuleField.prototype.validate_as_field = function(name, validator){
     var field = this;
 
-    var value = validator.get(name, field.operators);
+    var value = validator.get(name, field.checks);
 
     return value;
 }
@@ -1000,9 +949,9 @@ RuleField.prototype.validate_as_field = function(name, validator){
 RuleField.prototype.validate = function(value){
     var field = this;
 
-    var validator = new Validator(null);
+    var validator = new FieldVal(null);
 
-    var value = Validator.use_operators(value, field.operators, validator);
+    var value = FieldVal.use_checks(value, field.checks, validator);
 
     return validator.end();
 }
@@ -1264,7 +1213,7 @@ Field.prototype.layout = function(){
     )
 
     if(field.properties.description){
-        $("<div />").text(field.properties.description).insertAfter(field.title);
+        $("<div />").addClass("field_description").text(" - "+field.properties.description).insertAfter(field.title);
     }
 }
 
@@ -1372,18 +1321,11 @@ fieldval_ui_extend(TextField, Field);
 function TextField(name, properties) {
     var field = this;
 
-    if(typeof properties === 'string'){
-        field.input_type = properties;
-        properties = null;
-    }
-
-    field.properties = properties || {};
+    TextField.superConstructor.call(this, name, properties);
 
     if(!field.input_type){
         field.input_type = field.properties.type || "text"
     }
-
-    TextField.superConstructor.call(this, name);
 
     field.element.addClass("text_field");
 
@@ -1479,10 +1421,10 @@ function PasswordField(name) {
 }
 fieldval_ui_extend(DisplayField, Field);
 
-function DisplayField(name) {
+function DisplayField(name, properties) {
     var field = this;
 
-    DisplayField.superConstructor.call(this, name);
+    DisplayField.superConstructor.call(this, name, properties);
 
     field.element.addClass("display_field");
 
@@ -1539,10 +1481,13 @@ DisplayField.prototype.val = function(set_val) {
 }
 fieldval_ui_extend(ChoiceField, Field);
 
-function ChoiceField(name, choices, allow_empty) {
+function ChoiceField(name, properties) {
     var field = this;
 
-    ChoiceField.superConstructor.call(this, name);
+    ChoiceField.superConstructor.call(this, name, properties);
+
+    field.choices = field.properties.choices || [];
+    field.allow_empty = field.allow_empty || false;
 
     field.element.addClass("choice_field");
 
@@ -1555,13 +1500,13 @@ function ChoiceField(name, choices, allow_empty) {
 
     field.choice_values = [];
 
-    if(allow_empty){
+    if(field.allow_empty){
         var option = $("<option />").attr("value",null).text("")
         field.select.append(option);
     }
 
-    for(var i = 0; i < choices.length; i++){
-        var choice = choices[i];
+    for(var i = 0; i < field.choices.length; i++){
+        var choice = field.choices[i];
 
         var choice_value,choice_text;
         if((typeof choice)=="object"){
@@ -1619,12 +1564,14 @@ ChoiceField.prototype.val = function(set_val) {
 }
 fieldval_ui_extend(DateField, Field);
 
-function DateField(name, format) {//format is currently unused
+function DateField(name, properties) {//format is currently unused
     var field = this;
 
-    field.format = format;
+    DateField.superConstructor.call(this, name, properties);
 
-    DateField.superConstructor.call(this, name);
+    if(!field.format){
+        field.format = field.properties.format || "YYYY-MM-DD";
+    }
 
     field.element.addClass("date_field");
 
@@ -1738,10 +1685,10 @@ DateField.prototype.val = function(set_val) {
 }
 fieldval_ui_extend(BooleanField, Field);
 
-function BooleanField(name) {
+function BooleanField(name, properties) {
     var field = this;
 
-    BooleanField.superConstructor.call(this, name);
+    BooleanField.superConstructor.call(this, name, properties);
 
     field.element.addClass("choice_field");
 
@@ -1789,10 +1736,10 @@ BooleanField.prototype.val = function(set_val) {
 }
 fieldval_ui_extend(ObjectField, Field);
 
-function ObjectField(name) {
+function ObjectField(name, properties) {
     var field = this;
 
-    ObjectField.superConstructor.call(this, name);
+    ObjectField.superConstructor.call(this, name, properties);
 
     field.element.addClass("object_field");
 
@@ -1873,7 +1820,7 @@ ObjectField.prototype.val = function(set_val) {
 
 if (typeof module != 'undefined') {
     module.exports = {
-    	fieldval: Validator,
+    	fieldval: FieldVal,
     	bval: BasicVal,
     	rule: ValidationRule
     };

@@ -5,7 +5,7 @@
 
 if (typeof module != 'undefined') {
     module.exports = {
-    	fieldval: Validator,
+    	fieldval: FieldVal,
     	bval: BasicVal,
     	rule: ValidationRule
     };
