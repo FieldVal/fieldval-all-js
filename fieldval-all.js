@@ -82,13 +82,13 @@ FieldVal.use_checks = function(value, checks, validator, field_name){
             } else {
                 flags = this_check;
                 this_check_function = flags.check;
-                if(flags!=null && flags.stop_if_error){
-                    stop_if_error = true;
+                if(flags!=null && flags.stop_on_error){
+                    stop_on_error = true;
                 }
             }
         } else {
             this_check_function = this_check;
-            stop_if_error = true;//defaults to true
+            stop_on_error = true;//defaults to true
         }
 
         var check = this_check_function(value, function(new_value){
@@ -116,7 +116,7 @@ FieldVal.use_checks = function(value, checks, validator, field_name){
                 }
             }
             had_error = true;
-            if(stop_if_error){
+            if(stop_on_error){
                 stop = true;
             }
         }
