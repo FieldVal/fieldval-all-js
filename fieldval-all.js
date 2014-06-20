@@ -19,6 +19,22 @@ FieldVal = function(validating) {
     fv.errors = [];
 }
 
+FieldVal.INCORRECT_TYPE_ERROR = function(expected_type, type){
+    return {
+        error_message: "Incorrect field type. Expected " + expected_type + ".",
+        error: FieldVal.INCORRECT_FIELD_TYPE,
+        expected: expected_type,
+        received: type
+    };
+}
+
+FieldVal.MISSING_ERROR = function(){
+    return {
+        error_message: "Field missing.",
+        error: FieldVal.FIELD_MISSING
+    };
+}
+
 FieldVal.REQUIRED_ERROR = "required";
 FieldVal.NOT_REQUIRED_BUT_MISSING = "notrequired";
 
@@ -28,19 +44,26 @@ FieldVal.INCORRECT_FIELD_TYPE = 2;
 FieldVal.FIELD_UNRECOGNIZED = 3;
 FieldVal.MULTIPLE_ERRORS = 4;
 
-FieldVal.get_value_and_type = function(value, desired_type) {
-    if (desired_type == "integer") {
-        var parsed = parseInt(value);
-        if (!isNaN(parsed) && ("" + parsed).length == ("" + value).length) {
-            value = parsed;
-            desired_type = parsed;
-            desired_type = "number";
-        }
-    } else if (desired_type == "float") {
-        var parsed = parseFloat(value);
-        if (!isNaN(parsed)) {
-            value = parsed;
-            desired_type = "number";
+FieldVal.get_value_and_type = function(value, desired_type, flags) {
+    if(!flags){
+        flags = {};
+    }
+    var parse = (typeof flags.parse) != 'undefined' ? flags.parse : false;
+
+    if(typeof value !== 'string' || parse){
+        if (desired_type == "integer") {
+            var parsed = parseInt(value);
+            if (!isNaN(parsed) && ("" + parsed).length == ("" + value).length) {
+                value = parsed;
+                desired_type = parsed;
+                desired_type = "number";
+            }
+        } else if (desired_type == "float") {
+            var parsed = parseFloat(value);
+            if (!isNaN(parsed)) {
+                value = parsed;
+                desired_type = "number";
+            }
         }
     }
 
@@ -60,13 +83,22 @@ FieldVal.get_value_and_type = function(value, desired_type) {
     };
 }
 
-FieldVal.use_checks = function(value, checks, validator, field_name){
+FieldVal.use_checks = function(value, checks, existing_validator, field_name, emit){
     var had_error = false;
     var stop = false;
+
+    var validator;
+    if(!existing_validator){
+        validator = new FieldVal();
+    }
+
+    var return_missing = false;//Used to escape from check list if a check returns a FieldVal.REQUIRED_ERROR error.
 
     var use_check = function(this_check){
 
         var this_check_function;
+        var stop_on_error = true;//Default to true
+        var flags = {};
         if((typeof this_check) === 'object'){
             if(Object.prototype.toString.call(this_check)==='[object Array]'){
                 for(var i = 0; i < this_check.length; i++){
@@ -82,8 +114,8 @@ FieldVal.use_checks = function(value, checks, validator, field_name){
             } else {
                 flags = this_check;
                 this_check_function = flags.check;
-                if(flags!=null && flags.stop_on_error){
-                    stop_on_error = true;
+                if(flags!=null && (flags.stop_on_error!==undefined)){
+                    stop_on_error = flags.stop_on_error;
                 }
             }
         } else {
@@ -95,24 +127,34 @@ FieldVal.use_checks = function(value, checks, validator, field_name){
             value = new_value;
         });
         if (check != null){
-            if(validator){
-                if(check===FieldVal.REQUIRED_ERROR){
-                    if(field_name){
-                        validator.missing(field_name);   
+            if(check===FieldVal.REQUIRED_ERROR){
+                if(field_name){
+                    if(existing_validator){
+                        existing_validator.missing(field_name, flags);
                     } else {
-                        validator.error({
-                            error_message: "Field missing.",
-                            error: FieldVal.FIELD_MISSING
-                        })
+                        return check;
                     }
-                } else if(check===FieldVal.NOT_REQUIRED_BUT_MISSING){
-                    //Don't process proceeding checks, but don't throw an error
                 } else {
-                    if(field_name){
-                        validator.invalid(field_name, check);
+                    if(existing_validator){
+                        existing_validator.error(
+                            FieldVal.create_error(FieldVal.MISSING_ERROR, flags)
+                        )
                     } else {
-                        validator.error(check);
+                        return_missing = true;
+                        return;
                     }
+                }
+            } else if(check===FieldVal.NOT_REQUIRED_BUT_MISSING){
+                //Don't process proceeding checks, but don't throw an error
+            } else {
+                if(existing_validator){
+                    if(field_name){
+                        existing_validator.invalid(field_name, check);
+                    } else {
+                        existing_validator.error(check);
+                    }
+                } else {
+                    validator.error(check);
                 }
             }
             had_error = true;
@@ -125,15 +167,27 @@ FieldVal.use_checks = function(value, checks, validator, field_name){
     for (var i = 0; i < checks.length; i++) {
         var this_check = checks[i];
         use_check(this_check);
+        if(return_missing){
+            return FieldVal.REQUIRED_ERROR;
+        }
         if(stop){
             break;
         }
     }
-    if (had_error) {
-        return undefined;
+
+    if(had_error){
+        if(emit){
+            emit(undefined);
+        }
+    } else {
+        if(emit){
+            emit(value);
+        }
     }
 
-    return value;
+    if(!existing_validator){
+        return validator.end();
+    }
 }
 
 FieldVal.required = function(required, flags){//required defaults to true
@@ -154,31 +208,23 @@ FieldVal.required = function(required, flags){//required defaults to true
 };
 
 
-FieldVal.type = function(desired_type, required, flags) {
+FieldVal.type = function(desired_type, flags) {
 
-    if((typeof required)==="object"){
-        flags = required;
-        required = typeof flags.required !== 'undefined' ? flags.required : true;
-    }
+    var required = (flags.required !== undefined) ? flags.required : true;
 
     var check = function(value, emit) {
 
         var required_error = FieldVal.required(required)(value); 
         if(required_error) return required_error;
 
-        var value_and_type = FieldVal.get_value_and_type(value, desired_type);
+        var value_and_type = FieldVal.get_value_and_type(value, desired_type, flags);
 
         var inner_desired_type = value_and_type.desired_type;
         var type = value_and_type.type;
         var value = value_and_type.value;
 
         if (type !== inner_desired_type) {
-            return {
-                error_message: "Incorrect field type. Expected " + inner_desired_type + ".",
-                error: FieldVal.INCORRECT_FIELD_TYPE,
-                expected: inner_desired_type,
-                received: type
-            };
+            return FieldVal.create_error(FieldVal.INCORRECT_TYPE_ERROR, flags, inner_desired_type, type);
         }
         if(emit){
             emit(value);
@@ -191,168 +237,193 @@ FieldVal.type = function(desired_type, required, flags) {
     return check;
 }
 
-FieldVal.prototype = {
+FieldVal.prototype.default = function(default_value){
+    var fv = this;
 
-    default: function(default_value){
-        var fv = this;
-
-        return {
-            get: function(field_name){
-                var get_result = fv.get.apply(fv,arguments);
-                if((typeof get_result) !== 'undefined'){
-                    return get_result;
-                }
-                //No value. Return the default
-                return default_value;
+    return {
+        get: function(field_name){
+            var get_result = fv.get.apply(fv,arguments);
+            if((typeof get_result) !== 'undefined'){
+                return get_result;
             }
+            //No value. Return the default
+            return default_value;
         }
-    },
-
-    get: function(field_name) {//Additional arguments are checks
-        var fv = this;
-
-        var value = fv.validating[field_name];
-
-        fv.recognized_keys[field_name] = true;
-
-        if (arguments.length > 1) {
-            //Additional checks
-
-            var checks = Array.prototype.slice.call(arguments,1);
-            value = FieldVal.use_checks(value, checks, fv, field_name);
-        }
-
-        return value;
-    },
-
-    //Top level error - something that cannot be assigned to a particular key
-    error: function(error){
-        var fv = this;
-
-        fv.errors.push(error);
-
-        return fv;
-    },
-
-    invalid: function(field_name, error) {
-        var fv = this;
-
-        var existing = fv.invalid_keys[field_name];
-        if (existing != null) {
-            //Add to an existing error
-            if (existing.errors != null) {
-                existing.errors.push(error);
-            } else {
-                fv.invalid_keys[field_name] = {
-                    error: FieldVal.MULTIPLE_ERRORS,
-                    error_message: "Multiple errors.",
-                    errors: [existing, error]
-                }
-            }
-        } else {
-            fv.invalid_keys[field_name] = error;
-            fv.invalid_count++;
-        }
-        return fv;
-    },
-
-    missing: function(field_name) {
-        var fv = this;
-
-        fv.missing_keys[field_name] = {
-            error_message: "Field missing.",
-            error: FieldVal.FIELD_MISSING
-        };
-        fv.missing_count++;
-        return fv;
-    },
-
-    unrecognized: function(field_name) {
-        var fv = this;
-
-        fv.unrecognized_keys[field_name] = {
-            error_message: "Unrecognized field.",
-            error: FieldVal.FIELD_UNRECOGNIZED
-        };
-        fv.unrecognized_count++;
-        return fv;
-    },
-
-    recognized: function(field_name){
-        var fv = this;
-
-        fv.recognized_keys[field_name] = true;
-
-        return fv;
-    },
-
-    //Exists to allow processing of remaining keys after known keys are checked
-    get_unrecognized: function(){
-        var fv = this;
-
-        var unrecognized = [];
-        for (var key in fv.validating) {
-            if (fv.recognized_keys[key] != true) {
-                unrecognized.push(key);
-            }
-        }
-        return unrecognized;
-    },
-
-    end: function() {
-        var fv = this;
-
-        var returning = {};
-
-        var has_error = false;
-
-        var unrecognized = fv.get_unrecognized();
-        for(var key in unrecognized){
-            fv.unrecognized(unrecognized[key]);
-        }
-
-        if(fv.missing_count !== 0) {
-            returning.missing = fv.missing_keys;
-            has_error = true;
-        }
-        if(fv.invalid_count !== 0) {
-            returning.invalid = fv.invalid_keys;
-            has_error = true;
-        }
-        if(fv.unrecognized_count !== 0) {
-            returning.unrecognized = fv.unrecognized_keys;
-            has_error = true;
-        }
-
-        if (has_error) {
-            returning.error_message = "One or more errors.";
-            returning.error = FieldVal.ONE_OR_MORE_ERRORS;
-
-            if(fv.errors.length===0){
-                return returning;
-            } else {
-                fv.errors.push(returning);
-            }
-        }
-
-        if(fv.errors.length!==0){
-            //Have top level errors
-            
-            if(fv.errors.length===1){
-                //Only 1 error, just return it
-                return fv.errors[0];
-            } else {
-                //Return a "multiple errors" error
-                return {
-                    error: FieldVal.MULTIPLE_ERRORS,
-                    error_message: "Multiple errors.",
-                    errors: fv.errors
-                }
-            }
-        }
-
-        return null;
     }
+};
+
+FieldVal.prototype.get = function(field_name) {//Additional arguments are checks
+    var fv = this;
+
+    var value = fv.validating[field_name];
+
+    fv.recognized_keys[field_name] = true;
+
+    if (arguments.length > 1) {
+        //Additional checks
+
+        var checks = Array.prototype.slice.call(arguments,1);
+        FieldVal.use_checks(value, checks, fv, field_name, function(new_value){
+            value = new_value;
+        });
+    }
+
+    return value;
+},
+
+//Top level error - something that cannot be assigned to a particular key
+FieldVal.prototype.error = function(error){
+    var fv = this;
+
+    fv.errors.push(error);
+
+    return fv;
+},
+
+FieldVal.prototype.invalid = function(field_name, error) {
+    var fv = this;
+
+    var existing = fv.invalid_keys[field_name];
+    if (existing != null) {
+        //Add to an existing error
+        if (existing.errors != null) {
+            existing.errors.push(error);
+        } else {
+            fv.invalid_keys[field_name] = {
+                error: FieldVal.MULTIPLE_ERRORS,
+                error_message: "Multiple errors.",
+                errors: [existing, error]
+            }
+        }
+    } else {
+        fv.invalid_keys[field_name] = error;
+        fv.invalid_count++;
+    }
+    return fv;
+},
+
+FieldVal.prototype.missing = function(field_name, flags) {
+    var fv = this;
+
+    fv.missing_keys[field_name] = FieldVal.create_error(FieldVal.MISSING_ERROR, flags);
+    fv.missing_count++;
+    return fv;
+},
+
+FieldVal.prototype.unrecognized = function(field_name) {
+    var fv = this;
+
+    fv.unrecognized_keys[field_name] = {
+        error_message: "Unrecognized field.",
+        error: FieldVal.FIELD_UNRECOGNIZED
+    };
+    fv.unrecognized_count++;
+    return fv;
+},
+
+FieldVal.prototype.recognized = function(field_name){
+    var fv = this;
+
+    fv.recognized_keys[field_name] = true;
+
+    return fv;
+},
+
+//Exists to allow processing of remaining keys after known keys are checked
+FieldVal.prototype.get_unrecognized = function(){
+    var fv = this;
+
+    var unrecognized = [];
+    for (var key in fv.validating) {
+        if (fv.recognized_keys[key] != true) {
+            unrecognized.push(key);
+        }
+    }
+    return unrecognized;
+},
+
+FieldVal.prototype.end = function() {
+    var fv = this;
+
+    var returning = {};
+
+    var has_error = false;
+
+    var unrecognized = fv.get_unrecognized();
+    for(var key in unrecognized){
+        fv.unrecognized(unrecognized[key]);
+    }
+
+    if(fv.missing_count !== 0) {
+        returning.missing = fv.missing_keys;
+        has_error = true;
+    }
+    if(fv.invalid_count !== 0) {
+        returning.invalid = fv.invalid_keys;
+        has_error = true;
+    }
+    if(fv.unrecognized_count !== 0) {
+        returning.unrecognized = fv.unrecognized_keys;
+        has_error = true;
+    }
+
+    if (has_error) {
+        returning.error_message = "One or more errors.";
+        returning.error = FieldVal.ONE_OR_MORE_ERRORS;
+
+        if(fv.errors.length===0){
+            return returning;
+        } else {
+            fv.errors.push(returning);
+        }
+    }
+
+    if(fv.errors.length!==0){
+        //Have top level errors
+        
+        if(fv.errors.length===1){
+            //Only 1 error, just return it
+            return fv.errors[0];
+        } else {
+            //Return a "multiple errors" error
+            return {
+                error: FieldVal.MULTIPLE_ERRORS,
+                error_message: "Multiple errors.",
+                errors: fv.errors
+            }
+        }
+    }
+
+    return null;
+}
+
+FieldVal.create_error = function(default_error, flags){
+    if(!flags){
+        return default_error.apply(null, Array.prototype.slice.call(arguments,2));
+    }
+    if(default_error===FieldVal.MISSING_ERROR){
+        if((typeof flags.missing_error) === 'function'){
+            return flags.missing_error.apply(null, Array.prototype.slice.call(arguments,2));
+        } else if((typeof flags.missing_error) === 'object'){
+            return flags.missing_error;
+        } else if((typeof flags.missing_error) === 'string'){
+            return {
+                error_message: flags.missing_error
+            }
+        }
+    } else {
+        if((typeof flags.error) === 'function'){
+            return flags.error.apply(null, Array.prototype.slice.call(arguments,2));
+        } else if((typeof flags.error) === 'object'){
+            return flags.error;
+        } else if((typeof flags.error) === 'string'){
+            return {
+                error_message: flags.error
+            }
+        }
+    }
+
+    return default_error.apply(null, Array.prototype.slice.call(arguments,2));
 }
 
 FieldVal.Error = function(number, message, data) {
@@ -377,6 +448,11 @@ FieldVal.Error = function(number, message, data) {
 if (typeof module != 'undefined') {
     module.exports = FieldVal;
 }
+var logger;
+if((typeof require) === 'function'){
+    logger = require('tracer').console();
+}
+
 var _validator_ref;
 
 if((typeof require) === 'function'){
@@ -429,41 +505,72 @@ var BasicVal = {
                 error_message: "Value does not have prefix: " + prefix
             }
         },
-        invalid_email: function(prefix) {
+        invalid_email: function() {
             return {
                 error: 107,
                 error_message: "Invalid email address format."
             }
         },
-        invalid_url: function(prefix) {
+        invalid_url: function() {
             return {
                 error: 108,
                 error_message: "Invalid url format."
             }
+        },
+        incorrect_length: function(len){
+            return {
+                error: 109,
+                error_message: "Length is not equal to " + len
+            }
+        },
+        no_suffix: function(suffix) {
+            return {
+                error: 106,
+                error_message: "Value does not have suffix: " + suffix
+            }
         }
     },
-    integer: function(required,flags){
-        return _validator_ref.type("integer",required,flags);
+    merge_required_and_flags: function(required, flags){
+        if((typeof required)==="object"){
+            flags = required;
+        } else {
+            if(!flags){
+                flags = {};
+            }
+            flags.required = required;
+        }
+        return flags;
     },
-    number: function(required,flags){
-        return _validator_ref.type("number",required,flags);
+    integer: function(required, flags){
+        return _validator_ref.type("integer",BasicVal.merge_required_and_flags(required, flags));
     },
-    array: function(required,flags){
-        return _validator_ref.type("array",required,flags);
+    number: function(required, flags){
+        return _validator_ref.type("number",BasicVal.merge_required_and_flags(required, flags));
     },
-    object: function(required,flags){
-        return _validator_ref.type("object",required,flags);
+    array: function(required, flags){
+        return _validator_ref.type("array",BasicVal.merge_required_and_flags(required, flags));
     },
-    float: function(required,flags){
-        return _validator_ref.type("float",required,flags);
+    object: function(required, flags){
+        return _validator_ref.type("object",BasicVal.merge_required_and_flags(required, flags));
     },
-    boolean: function(required,flags){
-        return _validator_ref.type("boolean",required,flags);
+    float: function(required, flags){
+        return _validator_ref.type("float",BasicVal.merge_required_and_flags(required, flags));
     },
-    string: function(required,flags){
+    boolean: function(required, flags){
+        return _validator_ref.type("boolean",BasicVal.merge_required_and_flags(required, flags));
+    },
+    string: function(required, flags){
+        flags = BasicVal.merge_required_and_flags(required, flags);
         var check = function(value, emit) {
+
+            var core_check = _validator_ref.type("string",flags);
+            if(typeof core_check === 'object'){
+                //Passing flags turns the check into an object
+                core_check = core_check.check;
+            }
+
             //Passing emit means that the value can be changed
-            var error = _validator_ref.type("string",required,flags)(value,emit);
+            var error = core_check(value,emit);
             if(error) return error;
 
             if(!flags || flags.trim!==false){//If not explicitly false
@@ -477,7 +584,19 @@ var BasicVal = {
                 }
             }
         }
-        if(flags!==undefined){
+        if(flags){
+            flags.check = check;
+            return flags
+        }
+        return check;
+    },
+    length: function(len, flags) {
+        var check = function(value) {
+            if (value.length!==len) {
+                return FieldVal.create_error(BasicVal.errors.incorrect_length, flags, len)
+            }
+        }
+        if(flags){
             flags.check = check;
             return flags
         }
@@ -486,10 +605,10 @@ var BasicVal = {
     min_length: function(min_len, flags) {
         var check = function(value) {
             if (value.length < min_len) {
-                return BasicVal.errors.too_short(min_len)
+                return FieldVal.create_error(BasicVal.errors.too_short, flags, min_len)
             }
         }
-        if(flags!==undefined){
+        if(flags){
             flags.check = check;
             return flags
         }
@@ -498,10 +617,10 @@ var BasicVal = {
     max_length: function(max_len, flags) {
         var check = function(value) {
             if (value.length > max_len) {
-                return BasicVal.errors.too_long(max_len);
+                return FieldVal.create_error(BasicVal.errors.too_long, flags, max_len);
             }
         }
-        if(flags!==undefined){
+        if(flags){
             flags.check = check;
             return flags
         }
@@ -510,10 +629,10 @@ var BasicVal = {
     minimum: function(min_val, flags) {
         var check = function(value) {
             if (value < min_val) {
-                return BasicVal.errors.too_small(min_val);
+                return FieldVal.create_error(BasicVal.errors.too_small, flags, min_val);
             }
         }
-        if(flags!==undefined){
+        if(flags){
             flags.check = check;
             return flags
         }
@@ -522,10 +641,10 @@ var BasicVal = {
     maximum: function(max_val, flags) {
         var check = function(value) {
             if (value > max_val) {
-                return BasicVal.errors.too_large(max_val);
+                return FieldVal.create_error(BasicVal.errors.too_large, flags, max_val);
             }
         }
-        if(flags!==undefined){
+        if(flags){
             flags.check = check;
             return flags
         }
@@ -535,12 +654,12 @@ var BasicVal = {
         //Effectively combines minimum and maximum
         var check = function(value){
             if (value < min_val) {
-                return BasicVal.errors.too_small(min_val);
+                return FieldVal.create_error(BasicVal.errors.too_small, flags, min_val);
             } else if (value > max_val) {
-                return BasicVal.errors.too_large(max_val);
+                return FieldVal.create_error(BasicVal.errors.too_large, flags, max_val);
             }
         }
-        if(flags!==undefined){
+        if(flags){
             flags.check = check;
             return flags
         }
@@ -548,20 +667,26 @@ var BasicVal = {
     },
     one_of: function(array, flags) {
         var valid_values = [];
-        for(var i = 0; i < array.length; i++){
-            var option = array[i];
-            if((typeof option) === 'object'){
-                valid_values.push(option[0]);
-            } else {
-                valid_values.push(option);
+        if(Object.prototype.toString.call(array) === '[object Array]'){
+            for(var i = 0; i < array.length; i++){
+                var option = array[i];
+                if((typeof option) === 'object'){
+                    valid_values.push(option[0]);
+                } else {
+                    valid_values.push(option);
+                }
+            }
+        } else {
+            for(var i in array){
+                valid_values.push(i);
             }
         }
         var check = function(value) {
             if (valid_values.indexOf(value) === -1) {
-                return BasicVal.errors.not_in_list();
+                return FieldVal.create_error(BasicVal.errors.not_in_list, flags);
             }
         }
-        if(flags!==undefined){
+        if(flags){
             flags.check = check;
             return flags
         }
@@ -571,15 +696,17 @@ var BasicVal = {
         var check = function(value) {
             if (trim) {
                 if (value.trim().length === 0) {
-                    return BasicVal.errors.cannot_be_empty();
+                    if(typeof flags.error){
+                    }
+                    return FieldVal.create_error(BasicVal.errors.cannot_be_empty, flags);
                 }
             } else {
                 if (value.length === 0) {
-                    return BasicVal.errors.cannot_be_empty();
+                    return FieldVal.create_error(BasicVal.errors.cannot_be_empty, flags);
                 }
             }
         }
-        if(flags!==undefined){
+        if(flags){
             flags.check = check;
             return flags
         }
@@ -589,13 +716,29 @@ var BasicVal = {
         var check = function(value) {
             if (value.length >= prefix.length) {
                 if (value.substring(0, prefix.length) != prefix) {
-                    return BasicVal.errors.no_prefix(prefix);
+                    return FieldVal.create_error(BasicVal.errors.no_prefix, flags, prefix);
                 }
             } else {
-                return BasicVal.errors.no_prefix(prefix);
+                return FieldVal.create_error(BasicVal.errors.no_prefix, flags, prefix);
             }
         }
-        if(flags!==undefined){
+        if(flags){
+            flags.check = check;
+            return flags
+        }
+        return check;
+    },
+    suffix: function(suffix, flags) {
+        var check = function(value) {
+            if (value.length >= suffix.length) {
+                if (value.substring(value.length-suffix.length, value.length) != suffix) {
+                    return FieldVal.create_error(BasicVal.errors.no_suffix, flags, suffix);
+                }
+            } else {
+                return FieldVal.create_error(BasicVal.errors.no_suffix, flags, suffix);
+            }
+        }
+        if(flags){
             flags.check = check;
             return flags
         }
@@ -617,7 +760,7 @@ var BasicVal = {
                 return error;
             }
         }
-        if(flags!==undefined){
+        if(flags){
             flags.check = check;
             return flags
         }
@@ -627,10 +770,10 @@ var BasicVal = {
         var check = function(value) {
             var re = BasicVal.email_regex;
             if(!re.test(value)){
-                return BasicVal.errors.invalid_email();
+                return FieldVal.create_error(BasicVal.errors.invalid_email, flags);
             } 
         }
-        if(flags!==undefined){
+        if(flags){
             flags.check = check;
             return flags
         }
@@ -640,10 +783,10 @@ var BasicVal = {
         var check = function(value) {
             var re = BasicVal.url_regex;
             if(!re.test(value)){
-                return BasicVal.errors.invalid_url();
+                return FieldVal.create_error(BasicVal.errors.invalid_url, flags);
             } 
         }
-        if(flags!==undefined){
+        if(flags){
             flags.check = check;
             return flags
         }
@@ -906,6 +1049,7 @@ function RuleField(json, validator) {
 
 RuleField.types = {
     text: TextRuleField,
+    string: TextRuleField,
     number: NumberRuleField,
     nested: NestedRuleField,
     choice: ChoiceRuleField
@@ -916,9 +1060,7 @@ RuleField.create_field = function(json) {
 
     var validator = new FieldVal(json);
 
-    var type = validator.get("type", BasicVal.string(true), BasicVal.one_of([
-        "nested","text","number","choice"//Need to improve structure
-    ]));
+    var type = validator.get("type", BasicVal.string(true), BasicVal.one_of(RuleField.types));
 
     if(type){
         var field_class = RuleField.types[type];
@@ -951,7 +1093,10 @@ RuleField.prototype.validate = function(value){
 
     var validator = new FieldVal(null);
 
-    var value = FieldVal.use_checks(value, field.checks, validator);
+    var error = FieldVal.use_checks(value, field.checks);
+    if(error){
+        validator.error(error);
+    }
 
     return validator.end();
 }
@@ -1417,7 +1562,9 @@ fieldval_ui_extend(PasswordField, TextField);
 function PasswordField(name) {
     var field = this;
 
-    PasswordField.superConstructor.call(this, name, "password");
+    PasswordField.superConstructor.call(this, name, {
+        type: "password"
+    });
 }
 fieldval_ui_extend(DisplayField, Field);
 
