@@ -1,3 +1,3 @@
-require('../node_modules/fieldval/test/test');
-require('../node_modules/fieldval-basicval/test/test');
-require('../node_modules/fieldval-rules/test/test');
+require('../bower_components/fieldval/test/test');
+require('../bower_components/fieldval-basicval/test/test');
+require('../bower_components/fieldval-rules/test/test');

@@ -1,8 +1,11 @@
 {
   "name": "fieldval-all",
   "version": "0.0.1",
-  "dependencies": {
-  	"fieldval-ui" : "*"
+  "devDependencies": {
+  	"fieldval" : "FieldVal/fieldval-js",
+  	"fieldval-basicval" : "FieldVal/fieldval-basicval-js",
+  	"fieldval-ui" : "FieldVal/fieldval-ui",
+  	"fieldval-rules" : "FieldVal/fieldval-rules-js"
   },
   "private": true
 }
