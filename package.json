@@ -1,18 +1,19 @@
 {
-    "name": "fieldval-all",
-    "version": "0.0.0",
-    "description": "fieldval-all",
-    "main": "fieldval-all.js",
-    "dependencies": {
-        "tracer" : "*"
-    },
-    "devDependencies": {
-        "gulp-imports" : "MarcusLongmuir/gulp-imports",
-        "gulp-util": "^2.2.14",
-        "gulp": "^3.6.1",
-        "gulp-nodemon" : "*",
-        "gulp-watch": "^0.6.2",
-        "gulp-uglify": "^0.2.1",
-        "gulp-concat": "^2.2.0"
-    }
+  "name": "fieldval-all",
+  "version": "0.0.0",
+  "description": "fieldval-all",
+  "main": "fieldval-all.js",
+  "dependencies": {
+    "tracer": "*"
+  },
+  "devDependencies": {
+    "gulp": "^3.6.1",
+    "gulp-concat": "^2.2.0",
+    "gulp-imports": "MarcusLongmuir/gulp-imports",
+    "gulp-mocha": "^1.0.0",
+    "gulp-nodemon": "*",
+    "gulp-uglify": "^0.2.1",
+    "gulp-util": "^2.2.14",
+    "gulp-watch": "^0.6.2"
+  }
 }
