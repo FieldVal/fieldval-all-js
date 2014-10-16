@@ -8,8 +8,6 @@ var gulpImports = require('gulp-imports');
 var nodemon = require('gulp-nodemon');
 var path = require('path');
 
-var mocha = require('gulp-mocha');
-
 gulp.task('js', function(){
     return gulp.src([
         'src/All.js'
@@ -23,11 +21,6 @@ gulp.task('js', function(){
     .on('error', gutil.log)
 })
 
-gulp.task('test', function(){
-    gulp.src(['test/test.js'])
-    .pipe(mocha());
-});
-
 gulp.task('default', function(){
-    gulp.watch(['src/**.js'], ['js','test']);
+    gulp.watch(['src/**.js'], ['js']);
 });

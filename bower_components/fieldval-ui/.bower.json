@@ -1,0 +1,29 @@
+{
+  "name": "fieldval-ui",
+  "version": "0.1.1",
+  "main": "fieldval-ui.js",
+  "ignore": [
+    "bower_components",
+    "docs",
+    "docs_src",
+    "examples",
+    "node_modules",
+    "src",
+    "gulpfile.js",
+    ".gitignore"
+  ],
+  "devDependencies": {
+    "jquery": "1.11.1",
+    "nestable": "FieldVal/Nestable"
+  },
+  "homepage": "https://github.com/FieldVal/fieldval-ui",
+  "_release": "0.1.1",
+  "_resolution": {
+    "type": "version",
+    "tag": "v0.1.1",
+    "commit": "404b23466bfb719d5519aefba9ea22cd5f343aa1"
+  },
+  "_source": "git://github.com/FieldVal/fieldval-ui.git",
+  "_target": "0.1.1",
+  "_originalSource": "fieldval-ui"
+}
