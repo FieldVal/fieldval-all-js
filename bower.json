@@ -15,12 +15,5 @@
 		".travis.yml",
 		"link.sh",
 		".gitignore"
-	],
-	"devDependencies": {
-		"fieldval" : "0.1.3",
-		"fieldval-basicval" : "0.1.3",
-		"fieldval-dateval" : "0.1.1",
-		"fieldval-ui" : "0.1.1",
-		"fieldval-rules" : "0.1.3"
-	}
+	]
 }
